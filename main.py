@@ -1,18 +1,20 @@
 import colorsys
 import math
-import pygame
 import random
 import sys
 import time
+
+import pygame
+from pygame import mixer
+from pygame.locals import *
+
 from background import Background
 from button import Button
 from dreamis import Dreamis
 from player import Player
-from pygame import mixer
-from pygame.locals import *
 from utils import checkCollisions
 from utils import clamp
-
+from morkovka import Morkovka
 
 
 def main():
@@ -33,11 +35,14 @@ def main():
     jumpfx = pygame.mixer.Sound("data/sfx/jump.wav")
     upgradefx = pygame.mixer.Sound("data/sfx/upgrade.wav")
     dreamisfx = pygame.mixer.Sound("data/sfx/dream.wav")
+    morkvsfx = pygame.mixer.Sound("data/sfx/morkv.wav")
     deadfx = pygame.mixer.Sound("data/sfx/dead.wav")
+    morkovka = Morkovka()
     WHITE = (255, 255, 255)
     rotOffset = -5
     player = Player()
     dreamis = []
+    morkovka = []
     buttons = []
     for i in range(3): buttons.append(Button())
     buttons[0].typeIndicatorSprite = pygame.image.load('data/gfx/jump_indicator.png')
@@ -50,6 +55,9 @@ def main():
     for dream in dreamis:
         dream.position.xy = random.randrange(0, DISPLAY.get_width() - dream.sprite.get_width()), dreamis.index(
             dream) * -200 - player.position.y
+    for i in range(2): morkovka.append(Morkovka())
+    for morkva in morkovka:
+        morkva.position.xy = random.randrange(0, DISPLAY.get_width() - morkva.sprite.get_width()), morkovka.index(morkva) * -200 - player.position.y
     bg = [Background(), Background(), Background()]
     dreamCount = 0
     startingHeight = player.position.y
@@ -145,15 +153,17 @@ def main():
         currentHeightMarker = font.render(str(height), True, (color[0] * 255, color[1] * 255, color[2] * 255, 50))
         DISPLAY.blit(currentHeightMarker, (DISPLAY.get_width() / 2 - currentHeightMarker.get_width() / 2,
                                            camOffset + round((
-                                                                         player.position.y - startingHeight) / DISPLAY.get_height()) * DISPLAY.get_height() + player.currentSprite.get_height() - 40))
+                                                                     player.position.y - startingHeight) / DISPLAY.get_height()) * DISPLAY.get_height() + player.currentSprite.get_height() - 40))
 
         for dream in dreamis:
             DISPLAY.blit(dream.sprite, (dream.position.x, dream.position.y + camOffset))
+        for morkva in morkovka:
+            DISPLAY.blit(morkva.sprite, (morkva.position.x, morkva.position.y + camOffset))
 
         DISPLAY.blit(pygame.transform.rotate(player.currentSprite, clamp(player.velocity.y, -10, 5) * rotOffset),
                      (player.position.x, player.position.y + camOffset))
         DISPLAY.blit(shop_bg, (0, 0))
-        pygame.draw.rect(DISPLAY, (81, 48, 20), (21, 437, 150 * (health / 125), 25))
+        pygame.draw.rect(DISPLAY, (16, 209, 2), (21, 437, 150 * (health / 125), 25))
         DISPLAY.blit(shop, (0, 0))
 
         for button in buttons:
@@ -167,7 +177,7 @@ def main():
         DISPLAY.blit(dreamCountDisplay, (72, 394))
         if dead:
             DISPLAY.blit(retry_button, (4, 4))
-            deathMessage = font_small.render("ретрай?", True, (0, 0, 0))
+            deathMessage = font_small.render("RETRY", True, (0, 0, 0))
             DISPLAY.blit(deathMessage, (24, 8))
 
         height = round(-(player.position.y - startingHeight) / DISPLAY.get_height())
@@ -192,14 +202,31 @@ def main():
             dead = True
             pygame.mixer.Sound.play(deadfx)
 
+        for morkva in morkovka:
+            if morkva.position.y + camOffset + 90 > DISPLAY.get_height():
+                morkva.position.y -= DISPLAY.get_height() * 2
+                morkva.position.x = random.randrange(0, DISPLAY.get_width() - morkva.sprite.get_width())
+            if (checkCollisions(player.position.x, player.position.y, player.currentSprite.get_width(),
+                               player.currentSprite.get_height(), morkva.position.x, morkva.position.y,
+                               morkva.sprite.get_width(), morkva.sprite.get_height())):
+
+                dead = False
+                pygame.mixer.Sound.play(morkvsfx)
+                if dreamCount > 0 and dreamCount != 0:
+                    dreamCount -= 1
+                else:
+                    health = health - 25
+                morkva.position.y -= DISPLAY.get_height() - random.randrange(0, 200)
+                morkva.position.x = random.randrange(0, DISPLAY.get_width() - morkva.sprite.get_width())
+
         for dream in dreamis:
             if dream.position.y + camOffset + 90 > DISPLAY.get_height():
                 dream.position.y -= DISPLAY.get_height() * 2
                 dream.position.x = random.randrange(0, DISPLAY.get_width() - dream.sprite.get_width())
             if checkCollisions(player.position.x, player.position.y, player.currentSprite.get_width(),
-                                player.currentSprite.get_height(), dream.position.x, dream.position.y,
+                               player.currentSprite.get_height(), dream.position.x, dream.position.y,
 
-                dream.sprite.get_width(), dream.sprite.get_height()):
+                               dream.sprite.get_width(), dream.sprite.get_height()):
                 dead = False
                 pygame.mixer.Sound.play(dreamisfx)
                 dreamCount += 1
@@ -226,7 +253,7 @@ def main():
                         for i in range(dreamMultiplier):
                             dreamis.append(Dreamis())
                             dreamis[-1].position.xy = random.randrange(0,
-                                                                     DISPLAY.get_width() - dream.sprite.get_width()), player.position.y - DISPLAY.get_height() - random.randrange(
+                                                                       DISPLAY.get_width() - dream.sprite.get_width()), player.position.y - DISPLAY.get_height() - random.randrange(
                                 0, 200)
 
         if dead and clicked and checkCollisions(mouseX, mouseY, 3, 3, 4, 4, retry_button.get_width(),
@@ -248,7 +275,7 @@ def main():
             buttons[2].typeIndicatorSprite = pygame.image.load('data/gfx/dreamup_indicator.png')
             buttons[2].price = 30
             dreamis = []
-            for i in range(5): dreamis.append(dream())
+            for i in range(5): dreamis.append(Dreamis())
             for dream in dreamis:
                 dream.position.xy = random.randrange(0, DISPLAY.get_width() - dream.sprite.get_width()), dreamis.index(
                     dream) * -200 - player.position.y
