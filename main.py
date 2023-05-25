@@ -1,3 +1,4 @@
+import asyncio
 import colorsys
 import math
 import random
@@ -5,107 +6,137 @@ import sys
 import time
 
 import pygame
+import pygame.display as Display
 from pygame import mixer
 from pygame.locals import *
+from pygame.mixer import Sound
 
 from background import Background
 from button import Button
 from dreamis import Dreamis
-from player import Player
-from utils import checkCollisions
-from utils import clamp
 from morkovka import Morkovka
+from player import Player
+from utils import *
+
+pygame.init()
+Display.set_caption('Барсик')
+Display.set_icon(Dreamis.sprite)
+DISPLAY = Display.set_mode((640, 480), pygame.RESIZABLE | pygame.SCALED, 32)
+player = Player()
+morkovka = Morkovka()
+player = Player()
+jumpfx = Sound("data/sfx/jump.wav")
+indicators = ['data/gfx/jump_indicator.png', 'data/gfx/speed_indicator.png', 'data/gfx/dreamup_indicator.png']
+font = pygame.font.Font('data/fonts/font.otf', 100)
+font_small = pygame.font.Font('data/fonts/font.otf', 32)
+font_20 = pygame.font.Font('data/fonts/font.otf', 20)
+shop = pygame.image.load('data/gfx/shop.png')
+shop_bg = pygame.image.load('data/gfx/shop_bg.png')
+retry_button = pygame.image.load('data/gfx/retry_button.png')
+logo = pygame.image.load('data/gfx/logo.png')
+title_bg = pygame.image.load('data/gfx/bg.png')
+title_bg.fill((255, 30.599999999999998, 0.0), special_flags=pygame.BLEND_ADD)
+shadow = pygame.image.load('data/gfx/shadow.png')
+if ['win64', 'win32', 'win', 'linux'].__contains__(sys.platform):
+    sound_ext = '.wav'
+else:
+    sound_ext = '-pybag.ogg'
+jumpfx = pygame.mixer.Sound("data/sfx/jump" + sound_ext)
+upgradefx = pygame.mixer.Sound("data/sfx/upgrade" + sound_ext)
+dreamisfx = pygame.mixer.Sound("data/sfx/dream" + sound_ext)
+morkvsfx = pygame.mixer.Sound("Data/sfx/morkv.wav")
+deadfx = pygame.mixer.Sound("data/sfx/dead" + sound_ext)
+
+WHITE = (255, 255, 255)
 
 
-def main():
-    pygame.init()
-    DISPLAY = pygame.display.set_mode((853, 480), 0, 32)
-    pygame.display.set_caption('Барсик')
-    pygame.display.set_icon(Dreamis().sprite)
-    font = pygame.font.Font('data/fonts/font.otf', 100)
-    font_small = pygame.font.Font('data/fonts/font.otf', 32)
-    font_20 = pygame.font.Font('data/fonts/font.otf', 20)
-    shop = pygame.image.load('data/gfx/shop.png')
-    shop_bg = pygame.image.load('data/gfx/shop_bg.png')
-    retry_button = pygame.image.load('data/gfx/retry_button.png')
-    logo = pygame.image.load('data/gfx/logo.png')
-    title_bg = pygame.image.load('data/gfx/bg.png')
-    title_bg.fill((255, 30.599999999999998, 0.0), special_flags=pygame.BLEND_ADD)
-    shadow = pygame.image.load('data/gfx/shadow.png')
-    jumpfx = pygame.mixer.Sound("data/sfx/jump.wav")
-    upgradefx = pygame.mixer.Sound("data/sfx/upgrade.wav")
-    dreamisfx = pygame.mixer.Sound("data/sfx/dream.wav")
-    morkvsfx = pygame.mixer.Sound("data/sfx/morkv.wav")
-    deadfx = pygame.mixer.Sound("data/sfx/dead.wav")
-    morkovka = Morkovka()
-    WHITE = (255, 255, 255)
-    rotOffset = -5
-    player = Player()
+def start():
+    global dream_multiplier, dreamis, morkovka, morkva, buttons, last_time, clicked, jump, dt, mouse_x, mouse_y, scroll
+    last_time = time.time()
+    clicked = False
+    jump = False
+    scroll = True
+    dream_multiplier = 5
+    dt = 0
     dreamis = []
     morkovka = []
     buttons = []
-    for i in range(3): buttons.append(Button())
-    buttons[0].typeIndicatorSprite = pygame.image.load('data/gfx/jump_indicator.png')
-    buttons[0].price = 5
-    buttons[1].typeIndicatorSprite = pygame.image.load('data/gfx/speed_indicator.png')
-    buttons[1].price = 5
-    buttons[2].typeIndicatorSprite = pygame.image.load('data/gfx/dreamup_indicator.png')
-    buttons[2].price = 30
-    for i in range(5): dreamis.append(Dreamis())
-    for dream in dreamis:
-        dream.position.xy = random.randrange(0, DISPLAY.get_width() - dream.sprite.get_width()), dreamis.index(
-            dream) * -200 - player.position.y
-    for i in range(2): morkovka.append(Morkovka())
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    player.reset()
+
+    for i in range(3):
+        buttons.append(Button(i, indicators[i]))
+    buttons[2].set_price(30)
+
+    for _ in range(5):
+        dreamis.append(Dreamis())
+    for i in range(5):
+        dreamis.append(Dreamis(random.randrange(0, DISPLAY.get_width() - Dreamis().sprite.get_width()),
+                               i * -200 - player.position.y))
+    Sound.play(jumpfx)
+
+    for _ in range(2):
+        morkovka.append(Morkovka())
     for morkva in morkovka:
-        morkva.position.xy = random.randrange(0, DISPLAY.get_width() - morkva.sprite.get_width()), morkovka.index(morkva) * -200 - player.position.y
-    bg = [Background(), Background(), Background()]
-    dreamCount = 0
-    startingHeight = player.position.y
-    height = 0
-    health = 125
-    jump_force = 3
-    dreamMultiplier = 5
-    dead = False
-    framerate = 60
-    last_time = time.time()
-    splashScreenTimer = 0
+        morkva.position.xy = random.randrange(0, DISPLAY.get_width() - morkva.sprite.get_width()), morkovka.index(
+            morkva) * -200 - player.position.y
     pygame.mixer.Sound.play(jumpfx)
-    while splashScreenTimer < 100:
-        dt = time.time() - last_time
-        dt *= 60
-        last_time = time.time()
-        splashScreenTimer += dt
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
+
+
+def func_one(toggle: bool = True) -> None:
+    global dt, last_time, mouse_x, mouse_y, clicked, jump
+    dt = (time.time() - last_time) * 60
+    last_time = time.time()
+    if (toggle):
+        clicked = jump = False
+        clicked = False
+        jump = False
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+    event_handler()
+
+
+def event_handler() -> None:
+    global jump, clicked
+    for event in pygame.event.get():
+        if event.type == pygame.KEYDOWN and event.key == K_SPACE:
+            jump = True
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            clicked = True
+        if clicked and mouse_y < DISPLAY.get_height() - 90:
+            jump = True
+        if event.type == QUIT:
+            pygame.quit()
+            sys.exit()
+
+
+async def main() -> None:
+    global clicked, dream_multiplier, dreamis, scroll
+
+    start()
+
+    bg = [Background(), Background(), Background()]
+    starting_height = player.position.y
+    splash_screen_timer = 0
+    while splash_screen_timer < 100:
+        func_one(False)
+        splash_screen_timer += dt
         DISPLAY.fill((231, 205, 183))
-        startMessage = font_small.render("Дмитрий Шекуров", True, (171, 145, 123))
-        DISPLAY.blit(startMessage, (DISPLAY.get_width() / 2 - startMessage.get_width() / 2,
-                                    DISPLAY.get_height() / 2 - startMessage.get_height() / 2))
-        pygame.display.update()
+        start_message = font_small.render("Дмитрий Шекуров", True, (171, 145, 123))
+        DISPLAY.blit(start_message, (DISPLAY.get_width() / 2 - start_message.get_width() / 2,
+                                     DISPLAY.get_height() / 2 - start_message.get_height() / 2))
+        Display.update()
+        await asyncio.sleep(0)
         pygame.time.delay(10)
 
-    titleScreen = True
-    pygame.mixer.Sound.play(jumpfx)
-    while titleScreen:
-        dt = time.time() - last_time
-        dt *= 60
-        last_time = time.time()
-        mouseX, mouseY = pygame.mouse.get_pos()
-        clicked = False
-        keys = pygame.key.get_pressed()
-        for event in pygame.event.get():
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                clicked = True
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
-        if (clicked and checkCollisions(mouseX, mouseY, 3, 3, DISPLAY.get_width() / 2 - retry_button.get_width() / 2,
-                                        288, retry_button.get_width(), retry_button.get_height())):
+    title_screen = True
+    Sound.play(jumpfx)
+    while title_screen:
+        func_one()
+        if (clicked and check_collisions(mouse_x, mouse_y, 3, 3, DISPLAY.get_width() / 2 - retry_button.get_width() / 2,
+                                         288, retry_button.get_width(), retry_button.get_height())):
             clicked = False
-            pygame.mixer.Sound.play(upgradefx)
-            titleScreen = False
+            Sound.play(upgradefx)
+            title_screen = False
 
         DISPLAY.fill(WHITE)
         DISPLAY.blit(title_bg, (0, 0))
@@ -113,10 +144,11 @@ def main():
         DISPLAY.blit(logo, (DISPLAY.get_width() / 2 - logo.get_width() / 2,
                             DISPLAY.get_height() / 2 - logo.get_height() / 2 + math.sin(time.time() * 5) * 5 - 25))
         DISPLAY.blit(retry_button, (DISPLAY.get_width() / 2 - retry_button.get_width() / 2, 288))
-        startMessage = font_small.render("СТАРТ", True, (0, 0, 0))
-        DISPLAY.blit(startMessage, (DISPLAY.get_width() / 2 - startMessage.get_width() / 2, 292))
+        start_message = font_small.render("СТАРТ", True, (0, 0, 0))
+        DISPLAY.blit(start_message, (DISPLAY.get_width() / 2 - start_message.get_width() / 2, 292))
 
-        pygame.display.update()
+        Display.update()
+        await asyncio.sleep(0)
         pygame.time.delay(10)
 
     mixer.init()
@@ -124,171 +156,134 @@ def main():
     mixer.music.play(loops=-1)
 
     while True:
-        dt = time.time() - last_time
-        dt *= 60
-        last_time = time.time()
-        mouseX, mouseY = pygame.mouse.get_pos()
-        jump = False
-        clicked = False
-        keys = pygame.key.get_pressed()
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN and event.key == K_SPACE:
-                jump = True
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                clicked = True
-            if clicked and mouseY < DISPLAY.get_height() - 90:
-                jump = True
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
+        func_one()
 
-        camOffset = -player.position.y + DISPLAY.get_height() / 2 - player.currentSprite.get_size()[1] / 2
+        cam_offset = -player.position.y + (DISPLAY.get_height() - player.current_sprite.get_size()[1]) / 2
+        if (cam_offset <= 0):
+            if (not player.dead):
+                player.kill(deadfx)
+            scroll = False
+            cam_offset = 0
 
         DISPLAY.fill(WHITE)
         for o in bg:
-            o.setSprite(((player.position.y / 50) % 100) / 100)
+            o.set_sprite(((player.position.y / 50) % 100) / 100)
+            o.set_sprite(((player.position.y / 50) % 100) / 100)
             DISPLAY.blit(o.sprite, (0, o.position))
-
         color = colorsys.hsv_to_rgb(((player.position.y / 50) % 100) / 100, 0.5, 0.5)
-        currentHeightMarker = font.render(str(height), True, (color[0] * 255, color[1] * 255, color[2] * 255, 50))
-        DISPLAY.blit(currentHeightMarker, (DISPLAY.get_width() / 2 - currentHeightMarker.get_width() / 2,
-                                           camOffset + round((
-                                                                     player.position.y - startingHeight) / DISPLAY.get_height()) * DISPLAY.get_height() + player.currentSprite.get_height() - 40))
+        current_height_marker = font.render(str(player.height), True,
+                                            (color[0] * 255, color[1] * 255, color[2] * 255, 50))
+        DISPLAY.blit(current_height_marker, (DISPLAY.get_width() / 2 - current_height_marker.get_width() / 2,
+                                             cam_offset + round((
+                                                                            player.position.y - starting_height) / DISPLAY.get_height()) * DISPLAY.get_height() + player.current_sprite.get_height() - 40))
 
         for dream in dreamis:
-            DISPLAY.blit(dream.sprite, (dream.position.x, dream.position.y + camOffset))
+            DISPLAY.blit(dream.sprite, (dream.position.x, dream.position.y + cam_offset))
         for morkva in morkovka:
-            DISPLAY.blit(morkva.sprite, (morkva.position.x, morkva.position.y + camOffset))
+            if morkva in dreamis:
+                dreamis.remove(morkva)
+            else:
+                DISPLAY.blit(morkva.sprite, (morkva.position.x, morkva.position.y + cam_offset))
 
-        DISPLAY.blit(pygame.transform.rotate(player.currentSprite, clamp(player.velocity.y, -10, 5) * rotOffset),
-                     (player.position.x, player.position.y + camOffset))
+        DISPLAY.blit(
+            pygame.transform.rotate(player.current_sprite, clamp(player.velocity.y, -10, 5) * player.rot_offset),
+            (player.position.x, player.position.y + cam_offset))
         DISPLAY.blit(shop_bg, (0, 0))
-        pygame.draw.rect(DISPLAY, (16, 209, 2), (21, 437, 150 * (health / 125), 25))
+        pygame.draw.rect(DISPLAY, (16, 209, 2), (21, 437, 150 * (player.health / 100), 25))
         DISPLAY.blit(shop, (0, 0))
 
         for button in buttons:
-            DISPLAY.blit(button.sprite, (220 + (buttons.index(button) * 125), 393))
-            priceDisplay = font_small.render(str(button.price), True, (0, 0, 0))
-            DISPLAY.blit(priceDisplay, (262 + (buttons.index(button) * 125), 408))
-            levelDisplay = font_20.render('Лвл. ' + str(button.level), True, (200, 200, 200))
-            DISPLAY.blit(levelDisplay, (234 + (buttons.index(button) * 125), 441))
-            DISPLAY.blit(button.typeIndicatorSprite, (202 + (buttons.index(button) * 125), 377))
-        dreamCountDisplay = font_small.render(str(dreamCount).zfill(7), True, (0, 0, 0))
-        DISPLAY.blit(dreamCountDisplay, (72, 394))
-        if dead:
+            DISPLAY.blit(button.sprite, (220 + (button.index * 125), 393))
+            price_display = font_small.render(str(button.price), True, (0, 0, 0))
+            DISPLAY.blit(price_display, (262 + (button.index * 125), 408))
+            level_display = font_20.render(f'Lvl. {button.level}', True, (200, 200, 200))
+            DISPLAY.blit(level_display, (234 + (button.index * 125), 441))
+            DISPLAY.blit(button.type_indicator_sprite, (202 + (button.index * 125), 377))
+        bean_count_display = font_small.render(str(player.dream_count).zfill(7), True, (0, 0, 0))
+        DISPLAY.blit(bean_count_display, (72, 394))
+        if player.dead:
             DISPLAY.blit(retry_button, (4, 4))
-            deathMessage = font_small.render("RETRY", True, (0, 0, 0))
-            DISPLAY.blit(deathMessage, (24, 8))
+            death_message = font_small.render("RETRY", True, (0, 0, 0))
+            DISPLAY.blit(death_message, (24, 8))
 
-        height = round(-(player.position.y - startingHeight) / DISPLAY.get_height())
+        if (scroll):
+            player.set_height(round(-(player.position.y - starting_height) / DISPLAY.get_height()))
+            player.position.x += player.velocity.x * dt
+            if player.position.x < 0 or player.position.x + player.current_sprite.get_size()[0] > 640:
+                player.flip()
+            if jump and not player.dead:
+                player.velocity.y = -player.jump_force
+                Sound.play(jumpfx)
+            player.position.y += player.velocity.y * dt
+            player.velocity.y = clamp(player.velocity.y + player.acceleration * dt, -99999999999, 50)
 
-        player.position.x += player.velocity.x * dt
-        if player.position.x + player.currentSprite.get_size()[0] > 853:
-            player.velocity.x = -abs(player.velocity.x)
-            player.currentSprite = player.leftSprite
-            rotOffset = 5
-        if player.position.x < 0:
-            player.velocity.x = abs(player.velocity.x)
-            player.currentSprite = player.rightSprite
-            rotOffset = -5
-        if jump and not dead:
-            player.velocity.y = -jump_force
-            pygame.mixer.Sound.play(jumpfx)
-        player.position.y += player.velocity.y * dt
-        player.velocity.y = clamp(player.velocity.y + player.acceleration * dt, -99999999999, 50)
-
-        health -= 0.2 * dt
-        if health <= 0 and not dead:
-            dead = True
-            pygame.mixer.Sound.play(deadfx)
+        if not player.dead:
+            player.health -= 0.2 * dt
+            if player.health <= 0:
+                player.kill(deadfx)
 
         for morkva in morkovka:
-            if morkva.position.y + camOffset + 90 > DISPLAY.get_height():
+            if morkva.position.y + cam_offset + 90 > DISPLAY.get_height():
                 morkva.position.y -= DISPLAY.get_height() * 2
                 morkva.position.x = random.randrange(0, DISPLAY.get_width() - morkva.sprite.get_width())
-            if (checkCollisions(player.position.x, player.position.y, player.currentSprite.get_width(),
-                               player.currentSprite.get_height(), morkva.position.x, morkva.position.y,
-                               morkva.sprite.get_width(), morkva.sprite.get_height())):
+            if (check_collisions(player.position.x, player.position.y, player.current_sprite.get_width(),
+                                 player.current_sprite.get_height(), morkva.position.x, morkva.position.y,
+                                 morkva.sprite.get_width(), morkva.sprite.get_height())):
 
-                dead = False
-                pygame.mixer.Sound.play(morkvsfx)
-                if dreamCount > 0 and dreamCount != 0:
-                    dreamCount -= 1
+                Sound.play(morkvsfx)
+                if player.dream_count > 0 and player.dream_count != 0:
+                    player.dream_count -= 1
                 else:
-                    health = health - 25
+                    player.health = player.health - 25
                 morkva.position.y -= DISPLAY.get_height() - random.randrange(0, 200)
                 morkva.position.x = random.randrange(0, DISPLAY.get_width() - morkva.sprite.get_width())
 
         for dream in dreamis:
-            if dream.position.y + camOffset + 90 > DISPLAY.get_height():
+            if dream.position.y + cam_offset + 90 > DISPLAY.get_height():
                 dream.position.y -= DISPLAY.get_height() * 2
                 dream.position.x = random.randrange(0, DISPLAY.get_width() - dream.sprite.get_width())
-            if checkCollisions(player.position.x, player.position.y, player.currentSprite.get_width(),
-                               player.currentSprite.get_height(), dream.position.x, dream.position.y,
+            if (check_collisions(player.position.x, player.position.y, player.current_sprite.get_width(),
+                                 player.current_sprite.get_height(), dream.position.x, dream.position.y,
 
-                               dream.sprite.get_width(), dream.sprite.get_height()):
-                dead = False
-                pygame.mixer.Sound.play(dreamisfx)
-                dreamCount += 1
-                health = 125
+                                 dream.sprite.get_width(), dream.sprite.get_height())):
+                Sound.play(dreamisfx)
+                player.dream_count += 1
+                player.health = 100
                 dream.position.y -= DISPLAY.get_height() - random.randrange(0, 200)
                 dream.position.x = random.randrange(0, DISPLAY.get_width() - dream.sprite.get_width())
 
         for button in buttons:
-            buttonX, buttonY = 220 + (buttons.index(button) * 125), 393
-            if clicked and not dead and checkCollisions(mouseX, mouseY, 3, 3, buttonX, buttonY,
-                                                        button.sprite.get_width(), button.sprite.get_height()):
-                if (dreamCount >= button.price):
-                    pygame.mixer.Sound.play(upgradefx)
+            if clicked and not player.dead and check_collisions(mouse_x, mouse_y, 3, 3, button.position.x,
+                                                                button.position.y, button.sprite.get_width(),
+                                                                button.sprite.get_height()):
+                if (player.dream_count >= button.price):
+                    Sound.play(upgradefx)
                     button.level += 1
-                    dreamCount -= button.price
+                    player.dream_count -= button.price
                     button.price = round(button.price * 2.5)
-                    if (buttons.index(button) == 0):
-                        jump_force *= 1.5
-                    if (buttons.index(button) == 1):
+                    if (button.index == 0):
+                        player.jump_force *= 1.5
+                    if (button.index == 1):
                         player.velocity.x *= 1.5
-                    if (buttons.index(button) == 2):
-                        olddreamMultipler = dreamMultiplier
-                        dreamMultiplier += 10
-                        for i in range(dreamMultiplier):
-                            dreamis.append(Dreamis())
-                            dreamis[-1].position.xy = random.randrange(0,
-                                                                       DISPLAY.get_width() - dream.sprite.get_width()), player.position.y - DISPLAY.get_height() - random.randrange(
-                                0, 200)
+                    if (button.index == 2):
+                        dream_multiplier += 5
+                        for _ in range(dream_multiplier):
+                            dreamis.append(
+                                Dreamis(random.randrange(0, DISPLAY.get_width() - Dreamis().sprite.get_width()),
+                                        player.position.y - DISPLAY.get_height() - random.randrange(0, 200)))
 
-        if dead and clicked and checkCollisions(mouseX, mouseY, 3, 3, 4, 4, retry_button.get_width(),
-                                                retry_button.get_height()):
-            health = 125
-            player.velocity.xy = 3, 0
-            player.position.xy = 295, 100
-            player.currentSprite = player.rightSprite
-            dreamCount = 0
-            height = 0
-            jump_force = 3
-            dreamMultiplier = 5
-            buttons = []
-            for i in range(3): buttons.append(Button())
-            buttons[0].typeIndicatorSprite = pygame.image.load('data/gfx/jump_indicator.png')
-            buttons[0].price = 5
-            buttons[1].typeIndicatorSprite = pygame.image.load('data/gfx/speed_indicator.png')
-            buttons[1].price = 5
-            buttons[2].typeIndicatorSprite = pygame.image.load('data/gfx/dreamup_indicator.png')
-            buttons[2].price = 30
-            dreamis = []
-            for i in range(5): dreamis.append(Dreamis())
-            for dream in dreamis:
-                dream.position.xy = random.randrange(0, DISPLAY.get_width() - dream.sprite.get_width()), dreamis.index(
-                    dream) * -200 - player.position.y
-            pygame.mixer.Sound.play(upgradefx)
-            dead = False
+        if player.dead and clicked and check_collisions(mouse_x, mouse_y, 3, 3, 4, 4, retry_button.get_width(),
+                                                        retry_button.get_height()):
+            start()
 
-        bg[0].position = camOffset + round(player.position.y / DISPLAY.get_height()) * DISPLAY.get_height()
+        bg[0].position = cam_offset + round(player.position.y / DISPLAY.get_height()) * DISPLAY.get_height()
         bg[1].position = bg[0].position + DISPLAY.get_height()
         bg[2].position = bg[0].position - DISPLAY.get_height()
 
-        pygame.display.update()
+        Display.update()
+        await asyncio.sleep(0)
         pygame.time.delay(10)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
