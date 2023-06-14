@@ -1,8 +1,11 @@
-import pygame
 import colorsys
+
+import pygame
+
 
 class Background:
     uncolored_sprite = pygame.image.load('data/gfx/bg.png')
+
     def __init__(self):
         self.sprite = pygame.image.load('data/gfx/bg.png')
         self.position = 0

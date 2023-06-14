@@ -9,7 +9,7 @@ class Player:
 
     def __init__(self):
         self.dead = False
-        self.health = 100
+        self.health = 125
         self.height = 0
         self.position.xy = 295, 100
         self.velocity.xy = 3, 0

@@ -1,5 +1,6 @@
 import pygame
 
+
 class Dreamis:
     sprite = pygame.image.load('data/gfx/dream.png')
 

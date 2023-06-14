@@ -12,7 +12,7 @@ class Button:
         self.index = index
         self.type_indicator_sprite = load(indicator)
         self.position = pygame.Vector2()
-        self.position.xy = 220 + (self.index*125), 393
+        self.position.xy = 220 + (self.index * 125), 515
 
     def set_price(self, new_price: int) -> None:
         self.price = new_price
